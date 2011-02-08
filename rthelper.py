@@ -5,6 +5,7 @@ import base64, os, tempfile
 import urllib, urllib2, urlparse, cookielib
 import webbrowser
 from StringIO import StringIO
+from xml.sax import saxutils
 
 from lxml import etree
 import gtk
@@ -17,6 +18,9 @@ APPLICATION_NAME = 'rt-helper'
 RT_URL = 'https://rt.oucs.ox.ac.uk/'
 # Currently supported authentication: 'oxford-webauth', 'standard'
 AUTHENTICATION = 'oxford-webauth'
+
+RT_URL = 'https://rt.internal.michaelhowe.org/rt/'
+AUTHENTICATION = 'standard'
 
 
 # These are base64-encoded PNGs which will be written to temporary files
@@ -180,7 +184,7 @@ class WebAuthRTOpener(RTOpener):
             return response
 
     def _authenticate(self, response):
-        if not (self._username and self._password):
+        if not (self.credentials._username and self.credentials._password):
             raise BadCredentialsError
 
         login_page = etree.parse(response, parser=etree.HTMLParser())
@@ -329,6 +333,8 @@ class RTHelper(object):
         menu.popup(None, None, gtk.status_icon_position_menu, button, time, self._statusicon)
 
     def _request(self, url):
+        if isinstance(url, (list, dict, tuple)):
+            url = RT_URL + 'Ticket/Display.html?%s' % urllib.urlencode(url)
         while True:
             try:
                 return self._opener.open(url)
@@ -360,14 +366,16 @@ class RTHelper(object):
     def _take_ticket(self, event=None, steal=False, set_open=False, ticket_number=None):
         action, pp = ('Steal', 'stolen') if steal else ('Take', 'taken')
         ticket_number = ticket_number or self._ticket_number
-        set_open = '&Status=open' if set_open else ''
 
         # Callback actions
         show_ticket = ('show', 'Show', lambda n, action:self._show_ticket(ticket_number=ticket_number))
         steal_ticket = ('steal', 'Steal', lambda n, action:self._take_ticket(steal=True, ticket_number=ticket_number))
 
         try:
-            response = self._request(RT_URL + 'Ticket/Display.html?Action=%s&id=%s%s' % (action, ticket_number, set_open))
+            params = {'Action': action, 'id': ticket_number}
+            if set_open:
+                params['Status'] = 'open'
+            response = self._request(params)
         except RequestCancelledError:
             self._notify('Request cancelled', 'You have not %s this ticket.' % pp,
                          gtk.STOCK_DIALOG_ERROR, [show_ticket])
@@ -382,8 +390,8 @@ class RTHelper(object):
                 self._notify("It's already yours!", "This ticket already belongs to you.",
                              gtk.STOCK_DIALOG_WARNING, [show_ticket])
             elif result == 'You can only take tickets that are unowned':
-                owner = page.xpath(".//div[contains(@class, 'ticket-info-people')]//td[2]")[0].text.strip()
-                self._notify("Already taken", 'This ticket already belongs to %s' % owner,
+                owner = ' '.join(page.xpath(".//div[contains(@class, 'ticket-info-people')]//td[2]")[0].text.split())
+                self._notify("Already taken", 'This ticket already belongs to %s' % saxutils.escape(owner),
                              gtk.STOCK_DIALOG_WARNING, [show_ticket, steal_ticket])
             elif result.startswith('Owner changed from '):
                 self._notify(pp.title(), 'You have successfully %s this ticket' % pp,
@@ -397,7 +405,7 @@ class RTHelper(object):
         show_ticket = ('show', 'Show', lambda n, action:self._show_ticket(ticket_number=ticket_number))
 
         try:
-            response = self._request(RT_URL + 'Ticket/Display.html?Status=%s&id=%s' % (new_status, ticket_number))
+            response = self._request({'Status': new_status, 'id': ticket_number})
         except RequestCancelledError:
             self._notify('Request cancelled', 'You have not changed the status of this ticket.',
                          gtk.STOCK_DIALOG_ERROR, [show_ticket])
@@ -449,7 +457,7 @@ class RTHelper(object):
         try_again = ('try-again', 'Try again', lambda n, action: self._give_ticket(ticket_number=ticket_number))
 
         try:
-            response = self._request(RT_URL + 'Ticket/Display.html?Owner=%s&id=%s' % (new_owner, ticket_number))
+            response = self._request({'Owner': new_owner, 'id': ticket_number})
         except RequestCancelledError:
             self._notify('Request cancelled', 'You have not changed the owner of this ticket.',
                          gtk.STOCK_DIALOG_ERROR, [show_ticket])
@@ -462,10 +470,10 @@ class RTHelper(object):
             except (IndexError, AttributeError):
                 result = None
             if result == 'You can only reassign tickets that you own or that are unowned':
-                self._notify("Couldn't change owner", "This ticket belongs to %s, not you." % owner,
+                self._notify("Couldn't change owner", "This ticket belongs to %s, not you." % saxutils.escape(owner),
                              gtk.STOCK_DIALOG_WARNING, [show_ticket, steal_and_give])
             elif result.startswith('Owner changed from '):
-                self._notify('Owner changed', 'This ticket now belongs to %s.' % new_owner,
+                self._notify('Owner changed', 'This ticket now belongs to %s.' % saxutils.escape(new_owner),
                              gtk.STOCK_DIALOG_INFO, [show_ticket])
             elif result == 'That user does not exist':
                 self._notify('No such user', "The ticket's owner wasn't changed as the specified user doesn't exist.",
@@ -488,7 +496,7 @@ class RTHelper(object):
         try_again = ('try-again', 'Try again', lambda n, action: self._change_queue(ticket_number=ticket_number))
 
         try:
-            response = self._request(RT_URL + 'Ticket/Display.html?Queue=%s&id=%s' % (new_queue, ticket_number))
+            response = self._request({'Queue': new_queue, 'id': ticket_number})
         except RequestCancelledError:
             self._notify('Request cancelled', 'You have not changed the queue of this ticket.',
                          gtk.STOCK_DIALOG_ERROR, [show_ticket])
