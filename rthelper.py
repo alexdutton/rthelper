@@ -181,7 +181,7 @@ class WebAuthRTOpener(RTOpener):
             return response
 
     def _authenticate(self, response):
-        if not (self.credentials._username and self.credentials._password):
+        if not (self._credentials.username and self._credentials.password):
             raise BadCredentialsError
 
         login_page = etree.parse(response, parser=etree.HTMLParser())
