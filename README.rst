@@ -1,8 +1,6 @@
 RT Helper
 =========
 
-.. image:: screenshot.png
-
 RT Helper is a small Python GTK application that presents a status icon in the GNOME notification area. When a number appears in the primary selection buffer, right-clicking on the icon will present a menu of actions that can be performed on the corresponding RT ticket.
 
 Currently supported actions are:
