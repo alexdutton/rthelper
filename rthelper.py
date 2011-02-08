@@ -4,6 +4,7 @@
 import base64, os, tempfile
 import urllib, urllib2, urlparse, cookielib
 import webbrowser
+from StringIO import StringIO
 
 from lxml import etree
 import gtk
@@ -11,7 +12,12 @@ import pynotify
 import gnomekeyring
 
 APPLICATION_NAME = 'rt-helper'
+
+# Change these to use other RT instances.
 RT_URL = 'https://rt.oucs.ox.ac.uk/'
+# Currently supported authentication: 'oxford-webauth', 'standard'
+AUTHENTICATION = 'oxford-webauth'
+
 
 # These are base64-encoded PNGs which will be written to temporary files
 # and then read back into pixbufs for Gnome's delectation.
@@ -106,16 +112,16 @@ class CredentialManager(object):
         try:
             dialog.set_markup("Please enter your SSO credentials:")
             table = gtk.Table(2, 2)
-    
+
             username = gtk.Entry()
             table.attach(gtk.Label('Username:'), 0, 1, 0, 1, xpadding=5, ypadding=5)
             table.attach(username, 1, 2, 0, 1, xpadding=5, ypadding=5)
-    
+
             password = gtk.Entry()
             password.set_visibility(False)
             table.attach(gtk.Label('Password:'), 0, 1, 1, 2, xpadding=5, ypadding=5)
             table.attach(password, 1, 2, 1, 2, xpadding=5, ypadding=5)
-    
+
             username.connect('activate', lambda event:password.grab_focus())
             password.connect('activate', lambda event:dialog.response(gtk.RESPONSE_OK))
 
@@ -148,18 +154,22 @@ class BadCredentialsError(Exception):
 class RequestCancelledError(Exception):
     pass
 
-class WebAuthOpener(object):
+class RTOpener(object):
+    def __init__(self, credentials):
+        self._credentials = credentials
+        self._opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookielib.CookieJar()))
+
+    def __getattr__(self, name):
+        return getattr(self._opener, name)
+
+class WebAuthRTOpener(RTOpener):
     """
     An urllib2 opener object that has the right cookies to access a
     WebAuth-protected service.
     """
-    def __init__(self, username, password, webauth_url):
-        self.set_credentials(username, password)
+    def __init__(self, credentials, webauth_url):
+        super(WebAuthRTOpener, self).__init__(credentials)
         self._webauth_url = webauth_url
-        self._opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookielib.CookieJar()))
-
-    def set_credentials(self, username, password):
-        self._username, self._password = username, password
 
     def open(self, *args, **kwargs):
         response = self._opener.open(*args, **kwargs)
@@ -177,8 +187,8 @@ class WebAuthOpener(object):
         post_data = {}
         for node in login_page.xpath('.//input'):
             post_data[node.get('name')] = node.get('value')
-        post_data['username'] = self._username
-        post_data['password'] = self._password
+        post_data['username'] = self._credentials.username
+        post_data['password'] = self._credentials.password
 
         intermediate_url = urlparse.urljoin(response.geturl(), login_page.xpath('.//form')[0].attrib['action'])
         intermediate_page = etree.parse(self._opener.open(intermediate_url, urllib.urlencode(post_data)), parser=etree.HTMLParser())
@@ -189,8 +199,44 @@ class WebAuthOpener(object):
 
         return self._opener.open(go_button[0].attrib['href'])
 
+class _StandardRTOpenerResponse(StringIO):
+    def __init__(self, response):
+        self._response = response
+        StringIO.__init__(self, response.read())
     def __getattr__(self, name):
-        return getattr(self._opener, name)
+        return getattr(self._response, name)
+
+class StandardRTOpener(RTOpener):
+    """ An urllib2 opener that can handle RT's built-in authentication. """
+    def open(self, *args, **kwargs):
+        second_attempt = kwargs.pop('second_attempt', False)
+        response = _StandardRTOpenerResponse(self._opener.open(*args, **kwargs))
+
+        page = etree.fromstring(response.getvalue(), parser=etree.HTMLParser())
+        if page.xpath(".//form[@id='login']"):
+            if second_attempt:
+                raise BadCredentialsError
+            return self._authenticate(response, page)
+        else:
+            return response
+
+    def _authenticate(self, response, page):
+        form = page.xpath(".//form[@id='login']")[0]
+        post_data = {}
+        for node in form.xpath('.//input'):
+            if 'name' in node.attrib:
+                post_data[node.attrib['name']] = node.attrib.get('value', '')
+        post_data['user'] = self._credentials.username
+        post_data['pass'] = self._credentials.password
+
+        url = urlparse.urljoin(response.geturl(), form.attrib['action'])
+        return self.open(url, urllib.urlencode(post_data), second_attempt=True)
+
+
+AUTHENTICATION_METHODS = {
+    'oxford-webauth': lambda credentials: WebAuthRTOpener(credentials, 'https://webauth.ox.ac.uk/'),
+    'standard': StandardRTOpener,
+}
 
 class RTHelper(object):
     def __init__(self):
@@ -203,9 +249,7 @@ class RTHelper(object):
         self._opener = None
         self._ticket_number = None
         self._notifications = set()
-        self._opener = WebAuthOpener(self._credentials.username,
-                                     self._credentials.password,
-                                     'https://webauth.ox.ac.uk/')
+        self._opener = AUTHENTICATION_METHODS[AUTHENTICATION](self._credentials)
 
         self._clipboard = gtk.clipboard_get(gtk.gdk.SELECTION_PRIMARY)
         self._clipboard.connect('owner-change', self._clipboard_changed)
@@ -291,7 +335,6 @@ class RTHelper(object):
             except BadCredentialsError:
                 try:
                     self._credentials.acquire_credentials()
-                    self._opener.set_credentials(self._credentials.username, self._credentials.password)
                 except ValueError:
                     raise RequestCancelledError
 
