@@ -258,7 +258,7 @@ class RTHelper(object):
         self._clipboard.connect('owner-change', self._clipboard_changed)
         self._clipboard_changed(self._clipboard, None)
 
-        self._nofify_caps = set(pynotify.get_server_caps())
+        self._notify_caps = set(pynotify.get_server_caps())
 
     def _load_icons(self):
         " Decodes, saves and loads pixbufs for the applet icon. "
