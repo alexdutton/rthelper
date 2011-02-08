@@ -19,9 +19,6 @@ RT_URL = 'https://rt.oucs.ox.ac.uk/'
 # Currently supported authentication: 'oxford-webauth', 'standard'
 AUTHENTICATION = 'oxford-webauth'
 
-RT_URL = 'https://rt.internal.michaelhowe.org/'
-AUTHENTICATION = 'standard'
-
 # These are base64-encoded PNGs which will be written to temporary files
 # and then read back into pixbufs for Gnome's delectation.
 ICONS = {
