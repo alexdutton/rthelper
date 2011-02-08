@@ -19,6 +19,8 @@ RT_URL = 'https://rt.oucs.ox.ac.uk/'
 # Currently supported authentication: 'oxford-webauth', 'standard'
 AUTHENTICATION = 'oxford-webauth'
 
+RT_URL = 'https://rt.internal.michaelhowe.org/'
+AUTHENTICATION = 'standard'
 
 # These are base64-encoded PNGs which will be written to temporary files
 # and then read back into pixbufs for Gnome's delectation.
@@ -256,6 +258,8 @@ class RTHelper(object):
         self._clipboard.connect('owner-change', self._clipboard_changed)
         self._clipboard_changed(self._clipboard, None)
 
+        self._nofify_caps = set(pynotify.get_server_caps())
+
     def _load_icons(self):
         " Decodes, saves and loads pixbufs for the applet icon. "
         self._icons = {}
@@ -299,6 +303,12 @@ class RTHelper(object):
             item = gtk.MenuItem("Take and set open")
             item.connect('activate', lambda event:self._take_ticket(set_open=True))
             menu.append(item)
+
+            if 'actions' not in self._notify_caps:
+                item = gtk.MenuItem("Steal")
+                item.connect('activate', lambda event:self._take_ticket(steal=True))
+                menu.append(item)
+
 
             menu.append(gtk.SeparatorMenuItem())
 
@@ -347,8 +357,9 @@ class RTHelper(object):
             title = '#%s - %s' % (ticket_number, title)
 
         notification = pynotify.Notification(title, body, icon)
-        for action in actions:
-            notification.add_action(*action)
+        if 'actions' in self._notify_caps:
+            for action in actions:
+                notification.add_action(*action)
 
         notification.set_timeout(5000)
         self._notifications.add(notification)
@@ -467,7 +478,7 @@ class RTHelper(object):
             except (IndexError, AttributeError):
                 result = None
             if result == 'You can only reassign tickets that you own or that are unowned':
-                self._notify("Couldn't change owner", "This ticket belongs to %s, not you." % saxutils.escape(owner),
+                self._notify("Couldn't change owner", "This ticket belongs to %s, not you.%s" % (saxutils.escape(owner), ' Try stealing it first.' if 'actions' not in self._notify_caps else ''),
                              gtk.STOCK_DIALOG_WARNING, [show_ticket, steal_and_give])
             elif result.startswith('Owner changed from '):
                 self._notify('Owner changed', 'This ticket now belongs to %s.' % saxutils.escape(new_owner),
