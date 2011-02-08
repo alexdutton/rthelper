@@ -126,7 +126,7 @@ class CredentialManager(object):
             self._set_credentials(username.get_text(), password.get_text())
         finally:
             dialog.destroy()
-	
+
     def _set_credentials(self, username, password):
         " Stores the username and password in the Gnome keyring. "
         self._fetch_credentials()
@@ -147,34 +147,50 @@ class BadCredentialsError(Exception):
     pass
 class RequestCancelledError(Exception):
     pass
-            
-def WebAuthOpener(username, password):
+
+class WebAuthOpener(object):
     """
-    Returns an urllib2 opener object that has the right cookies to access a
+    An urllib2 opener object that has the right cookies to access a
     WebAuth-protected service.
     """
-    if not (username and password):
-        raise BadCredentialsError
+    def __init__(self, username, password, webauth_url):
+        self.set_credentials(username, password)
+        self._webauth_url = webauth_url
+        self._opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookielib.CookieJar()))
 
-    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookielib.CookieJar()))
+    def set_credentials(self, username, password):
+        self._username, self._password = username, password
 
-    login_response = opener.open(RT_URL)
-    login_page = etree.parse(login_response, parser=etree.HTMLParser())
-    post_data = {}
-    for node in login_page.xpath('.//input'):
-        post_data[node.get('name')] = node.get('value')
-    post_data['username'] = username
-    post_data['password'] = password
+    def open(self, *args, **kwargs):
+        response = self._opener.open(*args, **kwargs)
 
-    intermediate_url = urlparse.urljoin(login_response.geturl(), login_page.xpath('.//form')[0].attrib['action'])
-    intermediate_page = etree.parse(opener.open(intermediate_url, urllib.urlencode(post_data)), parser=etree.HTMLParser())
+        if response.geturl().startswith(self._webauth_url):
+            return self._authenticate(response)
+        else:
+            return response
 
-    go_button = intermediate_page.xpath('.//td/p/span/a')
-    if not go_button:
-        raise BadCredentialsError
+    def _authenticate(self, response):
+        if not (self._username and self._password):
+            raise BadCredentialsError
 
-    opener.open(go_button[0].attrib['href'])
-    return opener
+        login_page = etree.parse(response, parser=etree.HTMLParser())
+        post_data = {}
+        for node in login_page.xpath('.//input'):
+            post_data[node.get('name')] = node.get('value')
+        post_data['username'] = self._username
+        post_data['password'] = self._password
+
+        intermediate_url = urlparse.urljoin(response.geturl(), login_page.xpath('.//form')[0].attrib['action'])
+        intermediate_page = etree.parse(self._opener.open(intermediate_url, urllib.urlencode(post_data)), parser=etree.HTMLParser())
+
+        go_button = intermediate_page.xpath('.//td/p/span/a')
+        if not go_button:
+            raise BadCredentialsError
+
+        return self._opener.open(go_button[0].attrib['href'])
+
+    def __getattr__(self, name):
+        return getattr(self._opener, name)
 
 class RTHelper(object):
     def __init__(self):
@@ -187,9 +203,12 @@ class RTHelper(object):
         self._opener = None
         self._ticket_number = None
         self._notifications = set()
+        self._opener = WebAuthOpener(self._credentials.username,
+                                     self._credentials.password,
+                                     'https://webauth.ox.ac.uk/')
 
-	self._clipboard = gtk.clipboard_get(gtk.gdk.SELECTION_PRIMARY)
-	self._clipboard.connect('owner-change', self._clipboard_changed)
+        self._clipboard = gtk.clipboard_get(gtk.gdk.SELECTION_PRIMARY)
+        self._clipboard.connect('owner-change', self._clipboard_changed)
         self._clipboard_changed(self._clipboard, None)
 
     def _load_icons(self):
@@ -266,16 +285,15 @@ class RTHelper(object):
         menu.popup(None, None, gtk.status_icon_position_menu, button, time, self._statusicon)
 
     def _request(self, url):
-        while not self._opener:
+        while True:
             try:
-                self._opener = WebAuthOpener(self._credentials.username,
-                                             self._credentials.password)
+                return self._opener.open(url)
             except BadCredentialsError:
                 try:
                     self._credentials.acquire_credentials()
+                    self._opener.set_credentials(self._credentials.username, self._credentials.password)
                 except ValueError:
                     raise RequestCancelledError
-        return self._opener.open(url)
 
     def _notify(self, title, body, icon, actions, ticket_number=None, with_ticket_number=True):
         ticket_number = ticket_number or self._ticket_number
@@ -344,7 +362,7 @@ class RTHelper(object):
             page = etree.parse(response, parser=etree.HTMLParser())
             self._notify('Status changed', 'This ticket now has status <i>%s</i>.' % new_status,
                          gtk.STOCK_DIALOG_INFO, [show_ticket])
-        
+
     def _ask_question(self, title, question, prompt):
         dialog = gtk.MessageDialog(None,
                                    gtk.DIALOG_MODAL,
@@ -355,7 +373,7 @@ class RTHelper(object):
             dialog.set_title(title)
             dialog.set_markup(question)
             hbox = gtk.HBox()
-    
+
             entry = gtk.Entry()
             entry.connect('activate', lambda event:dialog.response(gtk.RESPONSE_OK))
             hbox.pack_start(gtk.Label(prompt), False, 5, 5)
@@ -379,7 +397,7 @@ class RTHelper(object):
                                                'Username:')
             except ValueError:
                 return
-        
+
         # Callback actions
         show_ticket = ('show', 'Show', lambda n, action:self._show_ticket(ticket_number=ticket_number))
         steal_and_give = ('steal-and-give', 'Steal and give',
@@ -409,7 +427,7 @@ class RTHelper(object):
             elif result == 'That user does not exist':
                 self._notify('No such user', "The ticket's owner wasn't changed as the specified user doesn't exist.",
                              gtk.STOCK_DIALOG_WARNING, [show_ticket, try_again])
-            
+
 
 
     def _change_queue(self, event=None, ticket_number=None, new_queue=None):
@@ -421,11 +439,11 @@ class RTHelper(object):
                                                'Queue name:')
             except ValueError:
                 return
-        
+
         # Callback actions
         show_ticket = ('show', 'Show', lambda n, action:self._show_ticket(ticket_number=ticket_number))
         try_again = ('try-again', 'Try again', lambda n, action: self._change_queue(ticket_number=ticket_number))
-        
+
         try:
             response = self._request(RT_URL + 'Ticket/Display.html?Queue=%s&id=%s' % (new_queue, ticket_number))
         except RequestCancelledError:
