@@ -307,12 +307,13 @@ class RTHelper(object):
         text = clipboard.wait_for_text()
         if text is None and self._ticket:
             return
-        if not text:
-            self._ticket= None
+
+        match = re.match(r'^(?:RT)?#?(\d+)\W?$', text or '')
+
+        if match:
+            self._ticket = match.group(1)
         else:
-            if text.startswith('#'):
-                text = text[1:]
-            self._ticket= text if text.isdigit() else None
+            self._ticket = None
 
         if self._ticket is not None:
             self._statusicon.set_from_pixbuf(self._icons['ok'])
@@ -324,46 +325,52 @@ class RTHelper(object):
         command = Command(self._ticket, self._request, self._notify)
 
         if self._ticket is not None:
-            show = gtk.MenuItem("Show")
+            item = gtk.MenuItem('Ticket #' + self._ticket)
+            item.set_sensitive(False)
+            menu.append(item)
+
+            menu.append(gtk.SeparatorMenuItem())
+
+            show = gtk.MenuItem("_Show")
             show.connect('activate', command.show)
             menu.append(show)
 
             menu.append(gtk.SeparatorMenuItem())
 
-            item = gtk.MenuItem("Take")
+            item = gtk.MenuItem("_Take")
             item.connect('activate', command.take)
             menu.append(item)
 
-            item = gtk.MenuItem("Take and set open")
+            item = gtk.MenuItem("T_ake and set open")
             item.connect('activate', command.take_and_set_open)
             menu.append(item)
 
-            item = gtk.MenuItem("Disown")
+            item = gtk.MenuItem("_Disown")
             item.connect('activate', command.disown)
             menu.append(item)
 
             if 'actions' not in self._notify.caps:
-                item = gtk.MenuItem("Steal")
+                item = gtk.MenuItem("S_teal")
                 item.connect('activate', command.steal)
                 menu.append(item)
 
             menu.append(gtk.SeparatorMenuItem())
 
-            item = gtk.MenuItem(u"Give ticket to…")
+            item = gtk.MenuItem(u"_Give ticket to…")
             item.connect('activate', command.give)
             menu.append(item)
 
-            item = gtk.MenuItem(u"Change queue…")
+            item = gtk.MenuItem(u"Change _queue…")
             item.connect('activate', command.change_queue)
             menu.append(item)
 
-            item = gtk.MenuItem(u"Punt…")
+            item = gtk.MenuItem(u"_Punt…")
             item.connect('activate', command.punt)
             menu.append(item)
 
             menu.append(gtk.SeparatorMenuItem())
 
-            for label, status in [('Set open', 'open'), ('Quick resolve', 'resolved'), ('Quick reject', 'rejected'), ('Delete', 'deleted')]:
+            for label, status in [('Set _open', 'open'), ('Quick _resolve', 'resolved'), ('Quick _reject', 'rejected'), ('De_lete', 'deleted')]:
                 # This needs wrapping in a function to provide a separate closure for each reference to status
                 def f(status):
                     return 
@@ -373,7 +380,7 @@ class RTHelper(object):
 
             menu.append(gtk.SeparatorMenuItem())
 
-        quit = gtk.MenuItem("Quit")
+        quit = gtk.MenuItem("_Quit")
         quit.connect('activate', gtk.main_quit)
         menu.append(quit)
 
