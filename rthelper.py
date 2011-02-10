@@ -486,12 +486,6 @@ class Command(object):
     def steal(self):
         return self.take(steal=True)
 
-    @action(label='Change status')
-    def _change_ticket_status(self, new_status):
-        response = self._request({'Status': new_status, 'id': self._ticket})
-        self._notify('Status changed', 'This ticket now has status <i>%s</i>.' % new_status,
-                     gtk.STOCK_DIALOG_INFO, [self.show])
-
     @action(label='Give')
     def give(self, new_owner=None):
         if not new_owner:
