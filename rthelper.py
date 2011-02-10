@@ -234,7 +234,6 @@ class RTResult(object):
     def __ne__(self, other):
         return self._ptype != other
 
-
 class _RTOpenerResponse(object):
     def __init__(self, response):
         self._response = response
@@ -270,7 +269,6 @@ class StandardRTOpener(RTOpener):
 
         url = urlparse.urljoin(response.geturl(), form.attrib['action'])
         return self.open(url, urllib.urlencode(post_data), second_attempt=True)
-
 
 AUTHENTICATION_METHODS = {
     'oxford-webauth': lambda credentials: WebAuthRTOpener(credentials, 'https://webauth.ox.ac.uk/'),
@@ -320,8 +318,6 @@ class RTHelper(object):
         else:
             self._statusicon.set_from_pixbuf(self._icons['error'])
 
-            
-
     def _show_menu(self, icon, button, time):
         menu = gtk.Menu()
         command = Command(self._ticket, self._request, self._notify)
@@ -345,7 +341,6 @@ class RTHelper(object):
                 item = gtk.MenuItem("Steal")
                 item.connect('activate', command.steal)
                 menu.append(item)
-
 
             menu.append(gtk.SeparatorMenuItem())
 
@@ -403,32 +398,6 @@ class RTHelper(object):
         notification.connect('closed', lambda n: self._notifications.remove(n))
         notification.show()
     _notify.caps = set(pynotify.get_server_caps())
-
-
-    def _ask_question(self, title, question, prompt):
-        dialog = gtk.MessageDialog(None,
-                                   gtk.DIALOG_MODAL,
-                                   gtk.MESSAGE_QUESTION,
-                                   gtk.BUTTONS_OK_CANCEL,
-                                   None)
-        try:
-            dialog.set_title(title)
-            dialog.set_markup(question)
-            hbox = gtk.HBox()
-
-            entry = gtk.Entry()
-            entry.connect('activate', lambda event:dialog.response(gtk.RESPONSE_OK))
-            hbox.pack_start(gtk.Label(prompt), False, 5, 5)
-            hbox.pack_end(entry)
-
-            dialog.vbox.pack_end(hbox, True, True, 0)
-            dialog.show_all()
-            if dialog.run() != gtk.RESPONSE_OK:
-                raise ValueError('Dialog cancelled')
-            dialog.hide_all()
-            return entry.get_text()
-        finally:
-            dialog.destroy()
 
 def action(label):
     def g(func):
