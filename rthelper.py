@@ -203,7 +203,7 @@ class WebAuthRTOpener(RTOpener):
 class RTResult(object):
     (USER_ALREADY_OWNS_TICKET, TICKET_NOT_UNOWNED, OWNER_CHANGED,
      STATUS_CHANGED, CANT_REASSIGN, NO_SUCH_USER, NO_SUCH_QUEUE,
-     QUEUE_CHANGED) = range(1, 9)
+     QUEUE_CHANGED, DELETED) = range(1, 10)
 
     _PATTERNS = {
         USER_ALREADY_OWNS_TICKET: r'^That user already owns that ticket$',
@@ -214,6 +214,7 @@ class RTResult(object):
         NO_SUCH_USER: r'^That user does not exist$',
         NO_SUCH_QUEUE: r'^That queue does not exist$',
         QUEUE_CHANGED: r'^Ticket \d+: Queue changed from (?P<old_queue>\w+) to (?P<new_queue>\w+)$',
+        DELETED: r'^Ticket \d+: Ticket deleted$',
     }
     _PATTERNS = [(a,re.compile(b)) for a,b in _PATTERNS.items()]
 
@@ -337,6 +338,10 @@ class RTHelper(object):
             item.connect('activate', command.take_and_set_open)
             menu.append(item)
 
+            item = gtk.MenuItem("Disown")
+            item.connect('activate', command.disown)
+            menu.append(item)
+
             if 'actions' not in self._notify.caps:
                 item = gtk.MenuItem("Steal")
                 item.connect('activate', command.steal)
@@ -350,6 +355,10 @@ class RTHelper(object):
 
             item = gtk.MenuItem(u"Change queue…")
             item.connect('activate', command.change_queue)
+            menu.append(item)
+
+            item = gtk.MenuItem(u"Punt…")
+            item.connect('activate', command.punt)
             menu.append(item)
 
             menu.append(gtk.SeparatorMenuItem())
@@ -548,9 +557,33 @@ class Command(object):
     @action(label='Change status')
     def change_status(self, new_status=None):
         response = self._request({'Status': new_status, 'id': self._ticket})
-        self._notify('Status changed',
-                     'This ticket now has status <i>%s</i>.' % new_status,
-                     gtk.STOCK_DIALOG_INFO, [self.show])
+        if response.result == RTResult.STATUS_CHANGED:
+            self._notify('Status changed',
+                         'This ticket now has status <i>%s</i>.' % new_status,
+                         gtk.STOCK_DIALOG_INFO, [self.show])
+            return True
+        elif response.result == RTResult.DELETED:
+            self._notify('Deleted',
+                         'This ticket has been deleted.',
+                         gtk.STOCK_DIALOG_INFO, [self.show, self.reopen])
+            return True
+        elif response.result is None:
+            self._notify("Status was already <i>%s</i>" % new_status,
+                         "Status not changed as it was already <i>%s</i>." % new_status,
+                         gtk.STOCK_DIALOG_WARNING, [self.show])
+            return True
+
+    @action(label='Reopen')
+    def reopen(self):
+        return self.change_status(new_status='open')
+
+    @action(label='Punt')
+    def punt(self):
+        return self.take() and self.change_queue() and self.disown()
+
+    @action(label='Disown')
+    def disown(self):
+        return self.give(new_owner='Nobody')
 
 if __name__ == '__main__':
     pynotify.init(APPLICATION_NAME)
