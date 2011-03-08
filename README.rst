@@ -6,9 +6,10 @@ RT Helper is a small Python GTK application that presents a status icon in the G
 Currently supported actions are:
 
  * Show ticket in a browser
- * Take
+ * Take (with 'steal' option if already taken)
  * Take and set open
  * Give ticket to another person
+ * Disown ticket
  * Move ticket to another queue
- * Change status 4444
-
+ * Change status
+ * Punt (take, move queue, give to nobody)
