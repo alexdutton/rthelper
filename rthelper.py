@@ -380,6 +380,10 @@ class RTHelper(object):
 
             menu.append(gtk.SeparatorMenuItem())
 
+        item = gtk.MenuItem("_Help")
+        item.connect('activate', lambda event: webbrowser.open('https://github.com/alexsdutton/rthelper/blob/master/documentation.rst#readme'))
+        menu.append(item)
+
         quit = gtk.MenuItem("_Quit")
         quit.connect('activate', gtk.main_quit)
         menu.append(quit)
