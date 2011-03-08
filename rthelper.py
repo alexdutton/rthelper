@@ -331,9 +331,9 @@ class RTHelper(object):
 
             menu.append(gtk.SeparatorMenuItem())
 
-            show = gtk.MenuItem("_Show")
-            show.connect('activate', command.show)
-            menu.append(show)
+            item = gtk.MenuItem("_Show")
+            item.connect('activate', command.show)
+            menu.append(item)
 
             menu.append(gtk.SeparatorMenuItem())
 
@@ -384,9 +384,9 @@ class RTHelper(object):
         item.connect('activate', lambda event: webbrowser.open('https://github.com/alexsdutton/rthelper/blob/master/documentation.rst#readme'))
         menu.append(item)
 
-        quit = gtk.MenuItem("_Quit")
-        quit.connect('activate', gtk.main_quit)
-        menu.append(quit)
+        item = gtk.MenuItem("_Quit")
+        item.connect('activate', gtk.main_quit)
+        menu.append(item)
 
         menu.show_all()
         menu.popup(None, None, gtk.status_icon_position_menu, button, time, self._statusicon)
