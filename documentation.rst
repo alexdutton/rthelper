@@ -18,6 +18,15 @@ Computing Services. However, you can change this by editing the RT_URL and
 AUTHENTICATION variables near the top of the file. It supports standard RT
 authentication and WebAuth (tested at the University of Oxford).
 
+Setting it to always be in the tray on start-up
+-----------------------------------------------
+
+If it's not already, you need to set the script as executable. Either perform
+'chmod +x rthelper.py' from a console, or use your file browser.
+
+Go to System > Preferences > Startup Applications. Click 'Add' and enter the
+path to the script in the Command box.
+
 Selecting a ticket
 ------------------
 
